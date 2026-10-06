@@ -3,7 +3,17 @@
 import { useEffect, useMemo, useState } from "react";
 import { Note, DEFAULT_NOTE } from "@/types/note";
 
-const STORAGE_KEY = "second-brain-notes-v1";
+const STORAGE_KEY = "second-brain-notes-v2";
+const TASKS_KEY = "second-brain-tasks-v1";
+
+type Task = {
+  id: string;
+  title: string;
+  noteId: string | null;
+  done: boolean;
+  due: string | null;
+  createdAt: string;
+};
 
 const seedNotes: Note[] = [
   {
@@ -12,10 +22,42 @@ const seedNotes: Note[] = [
     content:
       "Capture thoughts, connect ideas, turn them into action.\n\nThis app is designed for quick thinking, deeper memory, and personal clarity on an iPhone.",
     tags: ["welcome", "setup", "ideas"],
+    linkedIds: [],
     pinned: true,
     favorite: true,
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
+  },
+  {
+    id: "seed-2",
+    title: "Product idea: memory OS",
+    content:
+      "Turn scattered notes into a daily dashboard. Capture, connect, recall, and act on personal knowledge without friction.",
+    tags: ["product", "vision", "ideas"],
+    linkedIds: ["seed-1"],
+    pinned: false,
+    favorite: true,
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  },
+];
+
+const seedTasks: Task[] = [
+  {
+    id: "task-1",
+    title: "Review highlights from this week",
+    noteId: "seed-1",
+    done: false,
+    due: new Date().toISOString(),
+    createdAt: new Date().toISOString(),
+  },
+  {
+    id: "task-2",
+    title: "Turn one idea into a concrete action",
+    noteId: "seed-2",
+    done: false,
+    due: new Date(Date.now() + 86400000).toISOString(),
+    createdAt: new Date().toISOString(),
   },
 ];
 
@@ -27,15 +69,39 @@ function parseTags(value: string) {
     .filter((tag, index, arr) => arr.indexOf(tag) === index);
 }
 
-function formatDate(value: string) {
+function formatDate(value: string | null) {
+  if (!value) return "No date";
   return new Date(value).toLocaleDateString(undefined, {
     month: "short",
     day: "numeric",
   });
 }
 
+function normalizeNote(input: any): Note {
+  return {
+    ...DEFAULT_NOTE,
+    ...input,
+    tags: Array.isArray(input?.tags) ? input.tags : [],
+    linkedIds: Array.isArray(input?.linkedIds) ? input.linkedIds : [],
+    pinned: Boolean(input?.pinned),
+    favorite: Boolean(input?.favorite),
+  };
+}
+
+function normalizeTask(input: any): Task {
+  return {
+    id: input?.id ?? crypto.randomUUID(),
+    title: input?.title ?? "New task",
+    noteId: input?.noteId ?? null,
+    done: Boolean(input?.done),
+    due: input?.due ?? null,
+    createdAt: input?.createdAt ?? new Date().toISOString(),
+  };
+}
+
 export default function HomePage() {
   const [notes, setNotes] = useState<Note[]>(seedNotes);
+  const [tasks, setTasks] = useState<Task[]>(seedTasks);
   const [selectedId, setSelectedId] = useState<string>(seedNotes[0].id);
   const [query, setQuery] = useState("");
   const [tagFilter, setTagFilter] = useState<string>("all");
@@ -43,21 +109,32 @@ export default function HomePage() {
   const [draft, setDraft] = useState<Note>(DEFAULT_NOTE);
 
   useEffect(() => {
-    const saved = localStorage.getItem(STORAGE_KEY);
-    if (saved) {
+    const savedNotes = localStorage.getItem(STORAGE_KEY);
+    if (savedNotes) {
       try {
-        const parsed = JSON.parse(saved) as Note[];
+        const parsed = JSON.parse(savedNotes) as any[];
         if (Array.isArray(parsed) && parsed.length > 0) {
-          setNotes(parsed);
-          setSelectedId(parsed[0].id);
-          setDraft(parsed[0]);
-          return;
+          const normalizedNotes = parsed.map(normalizeNote);
+          setNotes(normalizedNotes);
+          setSelectedId(normalizedNotes[0].id);
+          setDraft(normalizedNotes[0]);
         }
       } catch {
-        // invalid storage, ignore
+        // invalid storage; ignore
       }
     }
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(seedNotes));
+
+    const savedTasks = localStorage.getItem(TASKS_KEY);
+    if (savedTasks) {
+      try {
+        const parsed = JSON.parse(savedTasks) as any[];
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          setTasks(parsed.map(normalizeTask));
+        }
+      } catch {
+        // invalid storage; ignore
+      }
+    }
   }, []);
 
   useEffect(() => {
@@ -65,6 +142,10 @@ export default function HomePage() {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(notes));
     }
   }, [notes]);
+
+  useEffect(() => {
+    localStorage.setItem(TASKS_KEY, JSON.stringify(tasks));
+  }, [tasks]);
 
   useEffect(() => {
     const selected = notes.find((note) => note.id === selectedId) ?? notes[0];
@@ -83,7 +164,10 @@ export default function HomePage() {
     [notes]
   );
 
-  const pinnedNotes = useMemo(() => notes.filter((note) => note.pinned).slice(0, 3), [notes]);
+  const todayTasks = useMemo(
+    () => tasks.filter((task) => !task.done).slice(0, 4),
+    [tasks]
+  );
 
   const filteredNotes = useMemo(() => {
     return notes.filter((note) => {
@@ -101,10 +185,21 @@ export default function HomePage() {
 
   const selectedNote = notes.find((note) => note.id === selectedId) ?? filteredNotes[0] ?? null;
 
+  const relatedNotes = useMemo(() => {
+    if (!selectedNote) return [];
+    return notes.filter((note) => {
+      if (note.id === selectedNote.id) return false;
+      const hasSharedTag = note.tags.some((tag) => selectedNote.tags.includes(tag));
+      const hasLinkedRef = selectedNote.linkedIds.includes(note.id) || note.linkedIds.includes(selectedNote.id);
+      return hasSharedTag || hasLinkedRef;
+    });
+  }, [notes, selectedNote]);
+
   const summary = useMemo(() => {
     const totalTags = new Set(notes.flatMap((note) => note.tags)).size;
     const pinnedCount = notes.filter((note) => note.pinned).length;
     const favoriteCount = notes.filter((note) => note.favorite).length;
+    const pendingCount = tasks.filter((task) => !task.done).length;
     const focusNote = notes.find((note) => note.pinned) ?? notes[0];
 
     return {
@@ -112,9 +207,10 @@ export default function HomePage() {
       tagsCount: totalTags,
       pinnedCount,
       favoriteCount,
+      pendingCount,
       focusNote: focusNote?.title ?? "No notes yet",
     };
-  }, [notes]);
+  }, [notes, tasks]);
 
   function createNewNote() {
     const now = new Date().toISOString();
@@ -123,6 +219,7 @@ export default function HomePage() {
       title: "New idea",
       content: "",
       tags: ["new"],
+      linkedIds: [],
       pinned: false,
       favorite: false,
       createdAt: now,
@@ -141,6 +238,7 @@ export default function HomePage() {
       ...draft,
       title: savedTitle,
       tags: parseTags(draft.tags.join(", ")),
+      linkedIds: Array.isArray(draft.linkedIds) ? draft.linkedIds : [],
       pinned: Boolean(draft.pinned),
       favorite: Boolean(draft.favorite),
       updatedAt: new Date().toISOString(),
@@ -151,6 +249,18 @@ export default function HomePage() {
 
   function updateField(field: keyof Note, value: string | boolean | string[]) {
     setDraft((prev) => ({ ...prev, [field]: value } as Note));
+  }
+
+  function addLinkToSelected(linkId: string) {
+    if (!selectedNote || selectedNote.linkedIds.includes(linkId) || linkId === selectedNote.id) return;
+    const updatedSelected = {
+      ...selectedNote,
+      linkedIds: [...selectedNote.linkedIds, linkId],
+      updatedAt: new Date().toISOString(),
+    };
+
+    setNotes((prev) => prev.map((note) => (note.id === updatedSelected.id ? updatedSelected : note)));
+    setDraft(updatedSelected);
   }
 
   function togglePin(id: string) {
@@ -169,6 +279,26 @@ export default function HomePage() {
     );
   }
 
+  function addTask() {
+    const nextTask: Task = {
+      id: crypto.randomUUID(),
+      title: selectedNote ? `Follow up on ${selectedNote.title}` : "New task",
+      noteId: selectedNote?.id ?? null,
+      done: false,
+      due: new Date(Date.now() + 86400000).toISOString(),
+      createdAt: new Date().toISOString(),
+    };
+    setTasks((prev) => [nextTask, ...prev]);
+  }
+
+  function toggleTaskStatus(id: string) {
+    setTasks((prev) =>
+      prev.map((task) =>
+        task.id === id ? { ...task, done: !task.done } : task
+      )
+    );
+  }
+
   function deleteCurrent() {
     if (!selectedNote) return;
     const remaining = notes.filter((note) => note.id !== selectedNote.id);
@@ -181,6 +311,7 @@ export default function HomePage() {
         title: "Fresh start",
         content: "Your second brain is ready.",
         tags: ["fresh"],
+        linkedIds: [],
         pinned: false,
         favorite: false,
         createdAt: new Date().toISOString(),
@@ -241,13 +372,17 @@ export default function HomePage() {
 
         <article className="panel focus-panel">
           <div className="focus-head">
-            <h2>Quick actions</h2>
+            <h2>Daily review</h2>
           </div>
           <div className="quick-actions">
             <button type="button" className="chip" onClick={createNewNote}>Capture idea</button>
             <button type="button" className="chip" onClick={() => setFilterMode("pinned")}>Pinned</button>
             <button type="button" className="chip" onClick={() => setFilterMode("favorites")}>Favorites</button>
             <button type="button" className="chip" onClick={() => setFilterMode("all")}>All notes</button>
+          </div>
+          <div className="review-meta">
+            <span>{summary.pendingCount} tasks pending</span>
+            <span>{summary.tagsCount} knowledge tags</span>
           </div>
           <div className="focus-note">
             <span className="label">Focused thread</span>
@@ -382,20 +517,67 @@ export default function HomePage() {
         </section>
       </div>
 
+      <section className="lower-grid">
+        <article className="panel task-panel">
+          <div className="section-head">
+            <h2>Action queue</h2>
+            <button type="button" className="secondary" onClick={addTask}>Add task</button>
+          </div>
+
+          <div className="task-list">
+            {todayTasks.length === 0 ? (
+              <p className="muted">No active tasks.</p>
+            ) : (
+              todayTasks.map((task) => (
+                <button type="button" key={task.id} className="task-item" onClick={() => toggleTaskStatus(task.id)}>
+                  <span className={task.done ? "checkbox done" : "checkbox"} aria-hidden="true" />
+                  <div>
+                    <strong>{task.title}</strong>
+                    <small>{task.due ? formatDate(task.due) : "No due date"}</small>
+                  </div>
+                </button>
+              ))
+            )}
+          </div>
+        </article>
+
+        <article className="panel network-panel">
+          <div className="section-head">
+            <h2>Relationship map</h2>
+          </div>
+
+          {relatedNotes.length === 0 ? (
+            <p className="muted">Link similar notes to build a deeper knowledge graph.</p>
+          ) : (
+            <div className="network-list">
+              {relatedNotes.map((note) => (
+                <button type="button" key={note.id} className="network-item" onClick={() => setSelectedId(note.id)}>
+                  <strong>{note.title}</strong>
+                  <span>{note.tags.join(" • ")}</span>
+                  <small onClick={(event) => { event.stopPropagation(); addLinkToSelected(note.id); }}>Link this note</small>
+                </button>
+              ))}
+            </div>
+          )}
+        </article>
+      </section>
+
       <section className="panel pinned-panel">
         <div className="section-head">
           <h2>Pinned ideas</h2>
         </div>
         <div className="pinned-list">
-          {pinnedNotes.length === 0 ? (
+          {notes.filter((note) => note.pinned).length === 0 ? (
             <p className="muted">No pinned ideas yet.</p>
           ) : (
-            pinnedNotes.map((note) => (
-              <button type="button" key={note.id} className="mini-note" onClick={() => setSelectedId(note.id)}>
-                <strong>{note.title}</strong>
-                <span>{note.tags.join(" • ") || "General"}</span>
-              </button>
-            ))
+            notes
+              .filter((note) => note.pinned)
+              .map((note) => (
+                <button type="button" key={note.id} className="mini-note" onClick={() => setSelectedId(note.id)}>
+                  <strong>{note.title}</strong>
+                  <span>{note.tags.join(" • ") || "General"}</span>
+                </button>
+              ))
           )}
         </div>
       </section>
