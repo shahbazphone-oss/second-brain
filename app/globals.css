@@ -12,6 +12,8 @@ const seedNotes: Note[] = [
     content:
       "Capture thoughts, connect ideas, turn them into action.\n\nThis app is designed for quick thinking, deeper memory, and personal clarity on an iPhone.",
     tags: ["welcome", "setup", "ideas"],
+    pinned: true,
+    favorite: true,
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
   },
@@ -25,11 +27,19 @@ function parseTags(value: string) {
     .filter((tag, index, arr) => arr.indexOf(tag) === index);
 }
 
+function formatDate(value: string) {
+  return new Date(value).toLocaleDateString(undefined, {
+    month: "short",
+    day: "numeric",
+  });
+}
+
 export default function HomePage() {
   const [notes, setNotes] = useState<Note[]>(seedNotes);
   const [selectedId, setSelectedId] = useState<string>(seedNotes[0].id);
   const [query, setQuery] = useState("");
   const [tagFilter, setTagFilter] = useState<string>("all");
+  const [filterMode, setFilterMode] = useState<"all" | "pinned" | "favorites">("all");
   const [draft, setDraft] = useState<Note>(DEFAULT_NOTE);
 
   useEffect(() => {
@@ -73,24 +83,36 @@ export default function HomePage() {
     [notes]
   );
 
+  const pinnedNotes = useMemo(() => notes.filter((note) => note.pinned).slice(0, 3), [notes]);
+
   const filteredNotes = useMemo(() => {
     return notes.filter((note) => {
       const content = `${note.title} ${note.content} ${note.tags.join(" ")}`.toLowerCase();
       const matchesQuery = !query || content.includes(query.toLowerCase());
       const matchesTag = tagFilter === "all" || note.tags.includes(tagFilter);
-      return matchesQuery && matchesTag;
+      const matchesMode =
+        filterMode === "all" ||
+        (filterMode === "pinned" && note.pinned) ||
+        (filterMode === "favorites" && note.favorite);
+
+      return matchesQuery && matchesTag && matchesMode;
     });
-  }, [notes, query, tagFilter]);
+  }, [notes, query, tagFilter, filterMode]);
 
   const selectedNote = notes.find((note) => note.id === selectedId) ?? filteredNotes[0] ?? null;
 
   const summary = useMemo(() => {
     const totalTags = new Set(notes.flatMap((note) => note.tags)).size;
-    const recent = notes[0]?.title ?? "No notes yet";
+    const pinnedCount = notes.filter((note) => note.pinned).length;
+    const favoriteCount = notes.filter((note) => note.favorite).length;
+    const focusNote = notes.find((note) => note.pinned) ?? notes[0];
+
     return {
       notesCount: notes.length,
       tagsCount: totalTags,
-      recent,
+      pinnedCount,
+      favoriteCount,
+      focusNote: focusNote?.title ?? "No notes yet",
     };
   }, [notes]);
 
@@ -101,6 +123,8 @@ export default function HomePage() {
       title: "New idea",
       content: "",
       tags: ["new"],
+      pinned: false,
+      favorite: false,
       createdAt: now,
       updatedAt: now,
     };
@@ -108,6 +132,7 @@ export default function HomePage() {
     setNotes((prev) => [newNote, ...prev]);
     setSelectedId(newNote.id);
     setDraft(newNote);
+    setFilterMode("all");
   }
 
   function saveDraft() {
@@ -116,16 +141,32 @@ export default function HomePage() {
       ...draft,
       title: savedTitle,
       tags: parseTags(draft.tags.join(", ")),
+      pinned: Boolean(draft.pinned),
+      favorite: Boolean(draft.favorite),
       updatedAt: new Date().toISOString(),
     };
 
+    setNotes((prev) => prev.map((note) => (note.id === next.id ? { ...next } : note)));
+  }
+
+  function updateField(field: keyof Note, value: string | boolean | string[]) {
+    setDraft((prev) => ({ ...prev, [field]: value } as Note));
+  }
+
+  function togglePin(id: string) {
     setNotes((prev) =>
-      prev.map((note) => (note.id === next.id ? { ...next } : note))
+      prev.map((note) =>
+        note.id === id ? { ...note, pinned: !note.pinned, updatedAt: new Date().toISOString() } : note
+      )
     );
   }
 
-  function updateField(field: keyof Note, value: string | string[]) {
-    setDraft((prev) => ({ ...prev, [field]: value } as Note));
+  function toggleFavorite(id: string) {
+    setNotes((prev) =>
+      prev.map((note) =>
+        note.id === id ? { ...note, favorite: !note.favorite, updatedAt: new Date().toISOString() } : note
+      )
+    );
   }
 
   function deleteCurrent() {
@@ -140,6 +181,8 @@ export default function HomePage() {
         title: "Fresh start",
         content: "Your second brain is ready.",
         tags: ["fresh"],
+        pinned: false,
+        favorite: false,
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
       };
@@ -165,21 +208,51 @@ export default function HomePage() {
           </div>
         </div>
 
-        <button className="primary" onClick={createNewNote}>New note</button>
+        <div className="header-actions">
+          <button type="button" className="secondary" onClick={() => setFilterMode("pinned")}>
+            Pinned
+          </button>
+          <button type="button" className="primary" onClick={createNewNote}>
+            New note
+          </button>
+        </div>
       </header>
 
-      <section className="summary-row">
-        <article className="stat-card panel">
-          <span className="label">Notes</span>
-          <strong>{summary.notesCount}</strong>
+      <section className="focus-grid">
+        <article className="panel focus-panel">
+          <div className="focus-head">
+            <h2>Today at a glance</h2>
+          </div>
+          <div className="summary-row">
+            <div className="stat-card">
+              <span className="label">Notes</span>
+              <strong>{summary.notesCount}</strong>
+            </div>
+            <div className="stat-card">
+              <span className="label">Pinned</span>
+              <strong>{summary.pinnedCount}</strong>
+            </div>
+            <div className="stat-card">
+              <span className="label">Favorites</span>
+              <strong>{summary.favoriteCount}</strong>
+            </div>
+          </div>
         </article>
-        <article className="stat-card panel">
-          <span className="label">Tags</span>
-          <strong>{summary.tagsCount}</strong>
-        </article>
-        <article className="stat-card panel wide">
-          <span className="label">Latest</span>
-          <strong>{summary.recent}</strong>
+
+        <article className="panel focus-panel">
+          <div className="focus-head">
+            <h2>Quick actions</h2>
+          </div>
+          <div className="quick-actions">
+            <button type="button" className="chip" onClick={createNewNote}>Capture idea</button>
+            <button type="button" className="chip" onClick={() => setFilterMode("pinned")}>Pinned</button>
+            <button type="button" className="chip" onClick={() => setFilterMode("favorites")}>Favorites</button>
+            <button type="button" className="chip" onClick={() => setFilterMode("all")}>All notes</button>
+          </div>
+          <div className="focus-note">
+            <span className="label">Focused thread</span>
+            <strong>{summary.focusNote}</strong>
+          </div>
         </article>
       </section>
 
@@ -206,7 +279,17 @@ export default function HomePage() {
         <aside className="panel sidebar">
           <div className="section-head">
             <h2>Library</h2>
-            <span>{filteredNotes.length}</span>
+            <div className="view-switcher">
+              <button type="button" className={filterMode === "all" ? "switch active" : "switch"} onClick={() => setFilterMode("all")}>
+                All
+              </button>
+              <button type="button" className={filterMode === "pinned" ? "switch active" : "switch"} onClick={() => setFilterMode("pinned")}>
+                Pinned
+              </button>
+              <button type="button" className={filterMode === "favorites" ? "switch active" : "switch"} onClick={() => setFilterMode("favorites")}>
+                Favorites
+              </button>
+            </div>
           </div>
 
           <div className="note-list">
@@ -222,13 +305,19 @@ export default function HomePage() {
                 >
                   <div className="note-item-top">
                     <strong>{note.title}</strong>
-                    <span>{new Date(note.updatedAt).toLocaleDateString()}</span>
+                    <span>{formatDate(note.updatedAt)}</span>
                   </div>
                   <p>{note.content.slice(0, 90) || "No content yet"}</p>
-                  <div className="tags-row">
-                    {note.tags.slice(0, 3).map((tag) => (
-                      <span key={tag} className="tag">{tag}</span>
-                    ))}
+                  <div className="meta-row">
+                    <div className="tags-row">
+                      {note.tags.slice(0, 3).map((tag) => (
+                        <span key={tag} className="tag">{tag}</span>
+                      ))}
+                    </div>
+                    <div className="note-icons">
+                      {note.pinned && <span>📌</span>}
+                      {note.favorite && <span>★</span>}
+                    </div>
                   </div>
                 </button>
               ))
@@ -242,8 +331,14 @@ export default function HomePage() {
               <div className="section-head">
                 <h2>Editor</h2>
                 <div className="actions">
+                  <button type="button" className="secondary" onClick={() => togglePin(selectedNote.id)}>
+                    {selectedNote.pinned ? "Unpin" : "Pin"}
+                  </button>
+                  <button type="button" className="secondary" onClick={() => toggleFavorite(selectedNote.id)}>
+                    {selectedNote.favorite ? "Unfavorite" : "Favorite"}
+                  </button>
                   {isDirty && (
-                    <button type="button" className="secondary" onClick={saveDraft}>
+                    <button type="button" className="primary" onClick={saveDraft}>
                       Save
                     </button>
                   )}
@@ -251,6 +346,12 @@ export default function HomePage() {
                     Delete
                   </button>
                 </div>
+              </div>
+
+              <div className="editor-meta">
+                <span>{selectedNote.pinned ? "Pinned" : "Unpinned"}</span>
+                <span>{selectedNote.favorite ? "Favorite" : "Standard"}</span>
+                <span>{formatDate(selectedNote.updatedAt)}</span>
               </div>
 
               <label>
@@ -280,6 +381,24 @@ export default function HomePage() {
           )}
         </section>
       </div>
+
+      <section className="panel pinned-panel">
+        <div className="section-head">
+          <h2>Pinned ideas</h2>
+        </div>
+        <div className="pinned-list">
+          {pinnedNotes.length === 0 ? (
+            <p className="muted">No pinned ideas yet.</p>
+          ) : (
+            pinnedNotes.map((note) => (
+              <button type="button" key={note.id} className="mini-note" onClick={() => setSelectedId(note.id)}>
+                <strong>{note.title}</strong>
+                <span>{note.tags.join(" • ") || "General"}</span>
+              </button>
+            ))
+          )}
+        </div>
+      </section>
     </main>
   );
 }

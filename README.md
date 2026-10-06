@@ -16,6 +16,7 @@
   --shadow: 0 18px 45px rgba(24, 39, 75, 0.12);
   --danger: #d92d5b;
   --danger-soft: rgba(217, 45, 91, 0.12);
+  --success: #1f9d6c;
 }
 
 * {
@@ -112,7 +113,9 @@ h2 {
 
 .primary,
 .secondary,
-.danger {
+.danger,
+.chip,
+.switch {
   border: none;
   border-radius: 14px;
   padding: 11px 16px;
@@ -123,7 +126,9 @@ h2 {
 
 .primary:hover,
 .secondary:hover,
-.danger:hover {
+.danger:hover,
+.chip:hover,
+.switch:hover {
   transform: translateY(-1px);
 }
 
@@ -143,23 +148,46 @@ h2 {
   color: var(--danger);
 }
 
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.focus-grid {
+  display: grid;
+  grid-template-columns: 1.2fr 0.8fr;
+  gap: 16px;
+  margin-bottom: 18px;
+}
+
+.focus-panel {
+  padding: 18px 16px;
+}
+
+.focus-head {
+  margin-bottom: 14px;
+}
+
 .summary-row {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 12px;
-  margin: 0 0 18px;
 }
 
 .stat-card {
-  padding: 18px 16px;
+  padding: 16px 12px;
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 8px;
+  background: rgba(255, 255, 255, 0.72);
+  border: 1px solid var(--border);
+  border-radius: 18px;
 }
 
 .label {
   color: var(--muted);
-  font-size: 0.75rem;
+  font-size: 0.7rem;
   text-transform: uppercase;
   letter-spacing: 0.1em;
 }
@@ -169,9 +197,31 @@ h2 {
   letter-spacing: -0.04em;
 }
 
-.stat-card.wide strong {
-  font-size: clamp(0.9rem, 2vw, 1.2rem);
-  line-height: 1.4;
+.quick-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.chip {
+  background: var(--accent-soft);
+  color: var(--accent-strong);
+  padding: 9px 12px;
+}
+
+.focus-note {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  background: rgba(47, 109, 246, 0.05);
+  border: 1px solid rgba(47, 109, 246, 0.12);
+  border-radius: 16px;
+  padding: 12px 14px;
+}
+
+.focus-note strong {
+  font-size: 1rem;
 }
 
 .toolbar {
@@ -237,6 +287,27 @@ h2 {
   margin-bottom: 16px;
 }
 
+.view-switcher {
+  display: flex;
+  gap: 6px;
+  background: rgba(255, 255, 255, 0.64);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 4px;
+}
+
+.switch {
+  background: transparent;
+  color: var(--muted);
+  padding: 8px 10px;
+  border-radius: 10px;
+}
+
+.switch.active {
+  background: var(--accent-soft);
+  color: var(--accent-strong);
+}
+
 .section-head span {
   display: inline-flex;
   min-width: 30px;
@@ -296,11 +367,24 @@ h2 {
   min-height: 44px;
 }
 
+.meta-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.note-icons {
+  display: flex;
+  gap: 8px;
+  font-size: 0.92rem;
+}
+
 .tags-row {
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
-  margin-top: 10px;
 }
 
 .tag {
@@ -346,9 +430,55 @@ h2 {
   resize: vertical;
 }
 
+.editor-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: -4px;
+}
+
+.editor-meta span {
+  display: inline-flex;
+  padding: 6px 10px;
+  border-radius: 999px;
+  background: rgba(47, 109, 246, 0.06);
+  color: var(--accent-strong);
+  font-size: 0.7rem;
+  font-weight: 700;
+}
+
 .actions {
   display: flex;
+  flex-wrap: wrap;
   gap: 8px;
+}
+
+.pinned-panel {
+  margin-top: 18px;
+  padding: 16px;
+}
+
+.pinned-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 12px;
+}
+
+.mini-note {
+  text-align: left;
+  padding: 12px 14px;
+  border-radius: 18px;
+  border: 1px solid var(--border);
+  background: rgba(255, 255, 255, 0.72);
+  color: var(--ink);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.mini-note span {
+  color: var(--muted);
+  font-size: 0.78rem;
 }
 
 .muted {
@@ -356,20 +486,31 @@ h2 {
 }
 
 @media (max-width: 820px) {
+  .focus-grid,
+  .grid,
   .summary-row {
     grid-template-columns: 1fr;
   }
 
-  .grid {
-    grid-template-columns: 1fr;
-  }
-
-  .toolbar {
+  .toolbar,
+  .topbar {
     flex-direction: column;
+    align-items: stretch;
   }
 
-  .toolbar select {
-    max-width: none;
+  .toolbar select,
+  .header-actions,
+  .view-switcher {
     width: 100%;
+  }
+
+  .header-actions {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .actions {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
