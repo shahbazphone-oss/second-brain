@@ -6,7 +6,6 @@
 :root {
   --bg: #f4f7fb;
   --panel: rgba(255, 255, 255, 0.82);
-  --panel-strong: #ffffff;
   --ink: #131b2a;
   --muted: #60708c;
   --accent: #2f6df6;
@@ -16,7 +15,6 @@
   --shadow: 0 18px 45px rgba(24, 39, 75, 0.12);
   --danger: #d92d5b;
   --danger-soft: rgba(217, 45, 91, 0.12);
-  --success: #1f9d6c;
 }
 
 * {
@@ -115,7 +113,8 @@ h2 {
 .secondary,
 .danger,
 .chip,
-.switch {
+.switch,
+.import-label {
   border: none;
   border-radius: 14px;
   padding: 11px 16px;
@@ -128,7 +127,8 @@ h2 {
 .secondary:hover,
 .danger:hover,
 .chip:hover,
-.switch:hover {
+.switch:hover,
+.import-label:hover {
   transform: translateY(-1px);
 }
 
@@ -146,6 +146,23 @@ h2 {
 .danger {
   background: var(--danger-soft);
   color: var(--danger);
+}
+
+.import-label {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(47, 109, 246, 0.06);
+  color: var(--accent-strong);
+  overflow: hidden;
+}
+
+.import-label input {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  cursor: pointer;
 }
 
 .header-actions {
@@ -349,7 +366,7 @@ h2 {
 
 .note-item,
 .task-item,
-.network-item,
+.network-button,
 .mini-note {
   width: 100%;
   text-align: left;
@@ -359,6 +376,13 @@ h2 {
   border-radius: 18px;
   padding: 14px 14px 12px;
   transition: border-color 0.18s ease, transform 0.18s ease;
+}
+
+.network-button {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 12px 14px;
 }
 
 .note-item.active {
@@ -374,13 +398,16 @@ h2 {
   margin-bottom: 8px;
 }
 
-.note-item strong,.task-item strong,.network-item strong,.mini-note strong {
+.note-item strong,
+.task-item strong,
+.network-button strong,
+.mini-note strong {
   font-size: 1rem;
   letter-spacing: -0.02em;
 }
 
 .note-item-top span,
-.network-item span,
+.network-button span,
 .mini-note span,
 .task-item small {
   color: var(--muted);
@@ -525,6 +552,7 @@ h2 {
   color: var(--accent-strong);
   font-weight: 700;
   text-decoration: underline;
+  cursor: pointer;
 }
 
 .pinned-panel {

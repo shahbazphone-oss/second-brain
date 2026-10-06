@@ -1,10 +1,7 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-import { Note, DEFAULT_NOTE } from "@/types/note";
-
-const STORAGE_KEY = "second-brain-notes-v2";
-const TASKS_KEY = "second-brain-tasks-v1";
+import { ChangeEvent, useEffect, useMemo, useState } from "react";
+import { DEFAULT_NOTE, Note } from "@/types/note";
 
 type Task = {
   id: string;
@@ -14,6 +11,9 @@ type Task = {
   due: string | null;
   createdAt: string;
 };
+
+const STORAGE_KEY = "second-brain-notes-v3";
+const TASKS_KEY = "second-brain-tasks-v1";
 
 const seedNotes: Note[] = [
   {
@@ -105,8 +105,9 @@ export default function HomePage() {
   const [selectedId, setSelectedId] = useState<string>(seedNotes[0].id);
   const [query, setQuery] = useState("");
   const [tagFilter, setTagFilter] = useState<string>("all");
-  const [filterMode, setFilterMode] = useState<"all" | "pinned" | "favorites">("all");
+  const [mode, setMode] = useState<"all" | "pinned" | "favorites">("all");
   const [draft, setDraft] = useState<Note>(DEFAULT_NOTE);
+  const [ready, setReady] = useState(false);
 
   useEffect(() => {
     const savedNotes = localStorage.getItem(STORAGE_KEY);
@@ -120,7 +121,7 @@ export default function HomePage() {
           setDraft(normalizedNotes[0]);
         }
       } catch {
-        // invalid storage; ignore
+        // ignore bad local data
       }
     }
 
@@ -132,20 +133,24 @@ export default function HomePage() {
           setTasks(parsed.map(normalizeTask));
         }
       } catch {
-        // invalid storage; ignore
+        // ignore bad local data
       }
     }
+
+    setReady(true);
   }, []);
 
   useEffect(() => {
+    if (!ready) return;
     if (notes.length > 0) {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(notes));
     }
-  }, [notes]);
+  }, [notes, ready]);
 
   useEffect(() => {
+    if (!ready) return;
     localStorage.setItem(TASKS_KEY, JSON.stringify(tasks));
-  }, [tasks]);
+  }, [tasks, ready]);
 
   useEffect(() => {
     const selected = notes.find((note) => note.id === selectedId) ?? notes[0];
@@ -165,7 +170,7 @@ export default function HomePage() {
   );
 
   const todayTasks = useMemo(
-    () => tasks.filter((task) => !task.done).slice(0, 4),
+    () => tasks.filter((task) => !task.done).slice(0, 5),
     [tasks]
   );
 
@@ -175,23 +180,23 @@ export default function HomePage() {
       const matchesQuery = !query || content.includes(query.toLowerCase());
       const matchesTag = tagFilter === "all" || note.tags.includes(tagFilter);
       const matchesMode =
-        filterMode === "all" ||
-        (filterMode === "pinned" && note.pinned) ||
-        (filterMode === "favorites" && note.favorite);
-
+        mode === "all" ||
+        (mode === "pinned" && note.pinned) ||
+        (mode === "favorites" && note.favorite);
       return matchesQuery && matchesTag && matchesMode;
     });
-  }, [notes, query, tagFilter, filterMode]);
+  }, [notes, query, tagFilter, mode]);
 
   const selectedNote = notes.find((note) => note.id === selectedId) ?? filteredNotes[0] ?? null;
 
   const relatedNotes = useMemo(() => {
     if (!selectedNote) return [];
+
     return notes.filter((note) => {
       if (note.id === selectedNote.id) return false;
-      const hasSharedTag = note.tags.some((tag) => selectedNote.tags.includes(tag));
-      const hasLinkedRef = selectedNote.linkedIds.includes(note.id) || note.linkedIds.includes(selectedNote.id);
-      return hasSharedTag || hasLinkedRef;
+      const sharedTag = note.tags.some((tag) => selectedNote.tags.includes(tag));
+      const linked = selectedNote.linkedIds.includes(note.id) || note.linkedIds.includes(selectedNote.id);
+      return sharedTag || linked;
     });
   }, [notes, selectedNote]);
 
@@ -229,7 +234,7 @@ export default function HomePage() {
     setNotes((prev) => [newNote, ...prev]);
     setSelectedId(newNote.id);
     setDraft(newNote);
-    setFilterMode("all");
+    setMode("all");
   }
 
   function saveDraft() {
@@ -245,22 +250,11 @@ export default function HomePage() {
     };
 
     setNotes((prev) => prev.map((note) => (note.id === next.id ? { ...next } : note)));
+    setSelectedId(next.id);
   }
 
   function updateField(field: keyof Note, value: string | boolean | string[]) {
     setDraft((prev) => ({ ...prev, [field]: value } as Note));
-  }
-
-  function addLinkToSelected(linkId: string) {
-    if (!selectedNote || selectedNote.linkedIds.includes(linkId) || linkId === selectedNote.id) return;
-    const updatedSelected = {
-      ...selectedNote,
-      linkedIds: [...selectedNote.linkedIds, linkId],
-      updatedAt: new Date().toISOString(),
-    };
-
-    setNotes((prev) => prev.map((note) => (note.id === updatedSelected.id ? updatedSelected : note)));
-    setDraft(updatedSelected);
   }
 
   function togglePin(id: string) {
@@ -279,6 +273,39 @@ export default function HomePage() {
     );
   }
 
+  function addLinkToSelected(linkId: string) {
+    if (!selectedNote || linkId === selectedNote.id || selectedNote.linkedIds.includes(linkId)) return;
+
+    const updated = {
+      ...selectedNote,
+      linkedIds: [...selectedNote.linkedIds, linkId],
+      updatedAt: new Date().toISOString(),
+    };
+
+    setNotes((prev) => prev.map((note) => (note.id === updated.id ? updated : note)));
+    setDraft(updated);
+  }
+
+  function generateInsight() {
+    if (!selectedNote) return;
+
+    const summaryText = [
+      `Insight for "${selectedNote.title}":`,
+      `Main themes: ${selectedNote.tags.length ? selectedNote.tags.join(", ") : "untagged"}`,
+      `Core idea: ${selectedNote.content.split(/\s+/).slice(0, 18).join(" ") || "No material yet"}`,
+      "Suggested next move: turn this into a task, decision, or follow-up note.",
+    ].join("\n\n");
+
+    const updated = {
+      ...selectedNote,
+      content: [selectedNote.content.trim(), summaryText].filter(Boolean).join("\n\n"),
+      updatedAt: new Date().toISOString(),
+    };
+
+    setNotes((prev) => prev.map((note) => (note.id === updated.id ? updated : note)));
+    setDraft(updated);
+  }
+
   function addTask() {
     const nextTask: Task = {
       id: crypto.randomUUID(),
@@ -293,9 +320,7 @@ export default function HomePage() {
 
   function toggleTaskStatus(id: string) {
     setTasks((prev) =>
-      prev.map((task) =>
-        task.id === id ? { ...task, done: !task.done } : task
-      )
+      prev.map((task) => (task.id === id ? { ...task, done: !task.done } : task))
     );
   }
 
@@ -326,6 +351,39 @@ export default function HomePage() {
     setSelectedId(remaining[0].id);
   }
 
+  function exportNotes() {
+    const blob = new Blob([JSON.stringify(notes, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "second-brain-notes.json";
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  function importNotes(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = () => {
+      try {
+        const parsed = JSON.parse(String(reader.result));
+        if (!Array.isArray(parsed)) return;
+        const normalized = parsed.map(normalizeNote);
+        if (normalized.length > 0) {
+          setNotes(normalized);
+          setSelectedId(normalized[0].id);
+          setDraft(normalized[0]);
+        }
+      } catch {
+        // ignore invalid import
+      }
+    };
+    reader.readAsText(file);
+    event.target.value = "";
+  }
+
   const isDirty = selectedNote ? JSON.stringify(selectedNote) !== JSON.stringify(draft) : false;
 
   return (
@@ -340,12 +398,12 @@ export default function HomePage() {
         </div>
 
         <div className="header-actions">
-          <button type="button" className="secondary" onClick={() => setFilterMode("pinned")}>
-            Pinned
-          </button>
-          <button type="button" className="primary" onClick={createNewNote}>
-            New note
-          </button>
+          <button type="button" className="secondary" onClick={exportNotes}>Export</button>
+          <label className="import-label">
+            <input type="file" accept="application/json" onChange={importNotes} />
+            Import
+          </label>
+          <button type="button" className="primary" onClick={createNewNote}>New note</button>
         </div>
       </header>
 
@@ -376,9 +434,9 @@ export default function HomePage() {
           </div>
           <div className="quick-actions">
             <button type="button" className="chip" onClick={createNewNote}>Capture idea</button>
-            <button type="button" className="chip" onClick={() => setFilterMode("pinned")}>Pinned</button>
-            <button type="button" className="chip" onClick={() => setFilterMode("favorites")}>Favorites</button>
-            <button type="button" className="chip" onClick={() => setFilterMode("all")}>All notes</button>
+            <button type="button" className="chip" onClick={() => setMode("pinned")}>Pinned</button>
+            <button type="button" className="chip" onClick={() => setMode("favorites")}>Favorites</button>
+            <button type="button" className="chip" onClick={() => setMode("all")}>All notes</button>
           </div>
           <div className="review-meta">
             <span>{summary.pendingCount} tasks pending</span>
@@ -415,13 +473,13 @@ export default function HomePage() {
           <div className="section-head">
             <h2>Library</h2>
             <div className="view-switcher">
-              <button type="button" className={filterMode === "all" ? "switch active" : "switch"} onClick={() => setFilterMode("all")}>
+              <button type="button" className={mode === "all" ? "switch active" : "switch"} onClick={() => setMode("all")}>
                 All
               </button>
-              <button type="button" className={filterMode === "pinned" ? "switch active" : "switch"} onClick={() => setFilterMode("pinned")}>
+              <button type="button" className={mode === "pinned" ? "switch active" : "switch"} onClick={() => setMode("pinned")}>
                 Pinned
               </button>
-              <button type="button" className={filterMode === "favorites" ? "switch active" : "switch"} onClick={() => setFilterMode("favorites")}>
+              <button type="button" className={mode === "favorites" ? "switch active" : "switch"} onClick={() => setMode("favorites")}>
                 Favorites
               </button>
             </div>
@@ -471,6 +529,9 @@ export default function HomePage() {
                   </button>
                   <button type="button" className="secondary" onClick={() => toggleFavorite(selectedNote.id)}>
                     {selectedNote.favorite ? "Unfavorite" : "Favorite"}
+                  </button>
+                  <button type="button" className="secondary" onClick={generateInsight}>
+                    Insight
                   </button>
                   {isDirty && (
                     <button type="button" className="primary" onClick={saveDraft}>
@@ -551,11 +612,13 @@ export default function HomePage() {
           ) : (
             <div className="network-list">
               {relatedNotes.map((note) => (
-                <button type="button" key={note.id} className="network-item" onClick={() => setSelectedId(note.id)}>
-                  <strong>{note.title}</strong>
-                  <span>{note.tags.join(" • ")}</span>
-                  <small onClick={(event) => { event.stopPropagation(); addLinkToSelected(note.id); }}>Link this note</small>
-                </button>
+                <div key={note.id} className="network-item">
+                  <button type="button" className="network-button" onClick={() => setSelectedId(note.id)}>
+                    <strong>{note.title}</strong>
+                    <span>{note.tags.join(" • ")}</span>
+                  </button>
+                  <small onClick={() => addLinkToSelected(note.id)}>Link this note</small>
+                </div>
               ))}
             </div>
           )}
